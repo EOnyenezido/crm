@@ -18,6 +18,14 @@
 		</ul>
 	</nav>
 	<h1>Hello Multiverse!</h1>
-	<h2>May the force be with you!</h2>
+	<h2>May the force be with you too!</h2>
+	<ul>
+		<li><a href="http://localhost:1337/admin">Dashboard</a></li>
+		<li><a href="http://localhost:1337/admin/users">Users</a></li>
+		<li><a href="http://localhost:1337/admin/posts">Posts</a></li>
+		<li><a href="http://localhost:1337/login">Login</a></li>
+	</ul>
+	<input id="name" type='text' name="name">
+	<button id="button" onclick="window.location.href='http://localhost:1337/admin/users/'+getElementById('name').value">Test parameter</button>
 </body>
 </html>
