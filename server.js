@@ -1,88 +1,207 @@
-// Web app framework
-var express = require('express');
-// Main express app
+/*This is a sample API for a CRM.
+	Only users have been included.
+	Author: Chukwuemeka Onyenezido*/
+
+// BASE SETUP
+// ==============================================
+
+// CALL OUR NODE PACKAGES
+var express = require('express'); // call express for routing
+var bodyParser = require('body-parser'); // call body-parser for reading the headers of POST requests
+var morgan = require('morgan'); // call morgan for logging requests to the console for debugging purposes
+var mongoose = require('mongoose'); // call mongoose for connecting with our mongodb database
+var jwt = require('jsonwebtoken'); // call jsonwebtoken for token based authentication
+var port = process.env.PORT || 8080; // set the port for our API
+
+// Create our secret passphrase for token
+var superSecret = 'RjssfrkC9Nnx7u45DsqmhZxVDR3YZWGE6CHhvy4X9HkTCamvZqpmNL3pJt9UArMKckbfmkAXJQuPTnTNhNkVJuPEhPdaFR75y9P6j7tuTAtVLucnEW8DBDeK'
+
+// Import our user model
+var User = require('./app/model/user.js');
+
+// connect to our database
+mongoose.connect('mongodb://localhost:27017/userDatabase');
+
+// APP configuration
+// Define our app using Express
 var app = express();
-var path = require('path');
+// Use body parser so we can grab information from POST requests
+app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.json());
 
-// main homepage route, this is the silly way to create routes
-// I replaced this with basic Router just to keep things streamlined
-//app.get('/', function(req, res)	{
-	//res.sendFile(path.join(__dirname + '/index.html'));
-//});
-
-// First basic route, using different instances of express.router is the cleanest way
-var basicRouter = express.Router();
-
-// Home page (http://localhost:1337)
-basicRouter.get('/', function(req, res)	{
-	res.sendFile(path.join(__dirname + '/index.html'));
-});
-
-// routes for the admin section
-// get an instance of the router express mini app
-var adminRouter = express.Router();
-
-// adminRouter middleware - do this before a request is processed
-// must be placed right after router declaration
-adminRouter.use(function(req, res, next)	{
-	// log the request type - get, post etc - and the url
-	console.log('The user made a', req.method, 'request to the URL', req.url);
-	//continue on with what we were doing and go to the route
+// Configure our app to handle cross domain - CORS - requests
+app.use(function(req, res, next)	{
+	res.setHeader('Access-Control-Allow-Origin', '*');
+	res.setHeader('Access-Control-Allow-Methods', 'GET, POST');
+	res.setHeader('Access-Control-Allow-Headers', 'X-Requested-With,content-type, \
+		Authorization');
 	next();
 })
 
-// admin main page, the dashboard (http://localhost:1337/admin)
-adminRouter.get('/', function(req, res)	{
-	res.send('I am the dashboard!');
+// Log all requests to the console for debugging purposes
+app.use(morgan('dev'));
+
+// ROUTES FOR OUR API
+// ==============================================
+
+// Basic route for the homepage - GET http://localhost:8080
+var homeRouter = express.Router();
+homeRouter.get('/', function(req, res)	{
+	res.send('Welcome to the home page!');
 });
 
-// users page (http://localhost:1337/admin/users)
-adminRouter.get('/users', function(req, res)	{
-	res.send('I show all the users!');
-});
+// Main api route
+var apiRouter = express.Router();
 
-// Special route middleware to validate routes with parameter :name
-adminRouter.param('name', function(req, res, next, name)	{
-	//do validation on name here
-	/*if (name != 'holly') {
-		res.send('You are not authorized, gerrarahia mehn!');
-		return;
-	};*/
-	//log something so we know it's working
-	console.log('doing name validations on', name);
-	// Once validation is done save the new item in the req
-	req.name = name;
-	//go to the next thing
-	next();
+// Authentication and tokenization route accessed at POST http://localhost:8080/authenticate
+apiRouter.post('/authenticate', function(req, res)	{
+	// Find the user
+	// Select a user, specifying the password explicitly so the database returns it
+	User.findOne({username: req.body.username}).select('name username password').exec(function(err, user)	{
+		// Unknown errors
+		if (err) throw err;
+		// No user with that username was found
+		if (!user)	{
+			res.json({success: false, message: 'Authentication failed, user not found'});
+		}
+		else if (user)	{
+			var validPassword = user.comparePassword(req.body.password);
+			// Password is wrong
+			if (!validPassword)	{
+				res.json({success: false, message: 'Authentication failed, wrong passord'});
+			}
+			else	{
+				// Password is correct
+				// Create a token
+				var token = jwt.sign({name: user.name, username: user.username}, superSecret, {expiresInMinutes: 1440}); // expires in 24 hours
+
+				// Send the token
+				res.json({
+					success: true,
+					message: 'User authenticated successfully',
+					token: token
+				});
+			}
+		}
+	});
 })
 
-// route with parameter - user's name - (http://localhost:1337/users/holly)
-adminRouter.get('/users/:name', function(req, res)	{
-	res.send('Hello ' + req.params.name + '!');
-})
+// Middleware for our API route
+apiRouter.use(function(req, res, next)	{
+	// Verifying the token
+	var token = req.body.token || req.param('token') || req.headers['x-access-token'];
 
-// posts page (http://localhost:1337/admin/posts)
-adminRouter.get('/posts', function(req, res)	{
-	res.send('I show all the posts');
+	if (token)	{
+
+		//Verify the token
+		jwt.verify(token, superSecret, function(err, decoded)	{
+			// Wrong token
+			if (err)	{
+				res.status(403).send({success: false, message: 'Failed to authenticate token, incorrect or expired token'});
+			}
+			else	{
+				// If everything is good pass on to other routes
+				req.decoded = decoded;
+
+				next();
+			}
+		})
+	}
+	else
+		// no token
+	res.status(403).send({success: false, message: 'No token provided'});
+
+	console.log('Somebody just called our API with ' + req.method + req.url);
 });
 
-// apply the routes to our application
-app.use('/', basicRouter);
-app.use('/admin', adminRouter);
+apiRouter.get('/', function(req, res)	{
+	res.json({ message: 'Welcome to our API!'});
+});
 
-//last way to create routes - directly from the express application instance
-//may get a bit confusing if the code grows very large
-app.route('/login')
-	//the get part
-	.get(function(req, res)	{
-		res.sendFile(path.join(__dirname + '/login.html'));
-	})
-	//the post part
+apiRouter.get('/me', function(req, res)	{
+	res.send(req.decoded);
+});
+
+// More api routes to be added here
+// On routes that end with /users - used to chain http actions get post etc.
+apiRouter.route('/users')
+	// Create a user (accessed at POST http://localhost:8080/api/users)
 	.post(function(req, res)	{
-		console.log('processing the login form');
-		res.send('processing the login form, please wait...');
-});
+		// Create a new instance of the user model
+		var user = new User();
+		// Set the users information from the request
+		user.name = req.body.name;
+		user.username = req.body.username;
+		user.password = req.body.password;
+		// Save the user and check for errors
+		user.save(function(err)	{
+			if (err) {
+				// Duplicate entry
+				if (err.code == 11000)	{
+					return res.json({success: false, message: 'A user with that username already exists!'});
+				}
+				else	{
+					return res.send(err);
+				}
+			}
+			res.json({message: 'User created successfully!'})
+		});
+	})
+	// Get all the users
+	.get(function(req, res)	{
+		User.find(function(err, users)	{
+			if (err)	res.send(err);
+			//return the users
+			res.json(users);
+		});
+	});
 
-app.listen(1337);
+apiRouter.route('/users/:user_id')
+	// Get user with the user id specified
+	.get(function(req, res)	{
+		User.findById(req.params.user_id, function(err, user)	{
+			if (err) res.send(err);
+			// Return the user with the id
+			res.json(user);
+		});
+	})
+	// Update a user's details using his specified id
+	.put(function(req, res)	{
+		// Use our model to find the user
+		User.findById(req.params.user_id, function(err, user)	{
+			if (err) res.send(err);
 
-console.log('Come find me at http://localhost:1337');
+			// Make sure the user details are not NULL or empty before saving
+			if (req.body.name) user.name = req.body.name;
+			if (req.body.username) user.username = req.body.username;
+			if (req.body.password) user.password = req.body.password;
+
+			user.save(function(err)	{
+				if (err) res.send(err);
+				// Return a message
+				res.send({message: 'User updated successfully!'});
+			});
+		});
+	})
+	// Delete a user with a specified id
+	.delete(function(req, res)	{
+		// Remove the user
+		User.remove({_id: req.params.user_id}, function(err, user)	{
+			if (err) return res.send(err);
+
+			// Send a message
+			res.send({message: 'User successfully deleted!'});
+		});
+	});
+
+// REGISTER OUR ROUTES
+// ==============================================
+// Homepage
+app.use('/', homeRouter);
+// API
+app.use('/api', apiRouter);
+
+// START THE SERVER
+// ==============================================
+app.listen(port);
+console.log('Come find me at ' + port);
