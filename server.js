@@ -12,6 +12,7 @@ var morgan = require('morgan'); // call morgan for logging requests to the conso
 var mongoose = require('mongoose'); // call mongoose for connecting with our mongodb database
 var jwt = require('jsonwebtoken'); // call jsonwebtoken for token based authentication
 var port = process.env.PORT || 8080; // set the port for our API
+var path = require('path');
 
 // Create our secret passphrase for token
 var superSecret = 'RjssfrkC9Nnx7u45DsqmhZxVDR3YZWGE6CHhvy4X9HkTCamvZqpmNL3pJt9UArMKckbfmkAXJQuPTnTNhNkVJuPEhPdaFR75y9P6j7tuTAtVLucnEW8DBDeK'
@@ -47,7 +48,11 @@ app.use(morgan('dev'));
 // Basic route for the homepage - GET http://localhost:8080
 var homeRouter = express.Router();
 homeRouter.get('/', function(req, res)	{
-	res.send('Welcome to the home page!');
+	res.sendFile(path.join(__dirname + '/index.html'));
+});
+
+homeRouter.get('/js/app.js', function(req, res)	{
+	res.sendFile(path.join(__dirname + '/js/app.js'));
 });
 
 // Main api route
